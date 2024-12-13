@@ -66,15 +66,19 @@ class AIProvider:
             response = requests.post(
                 "http://localhost:11434/api/chat",
                 json={
-                    "model": "llama2",  # or another model available in Ollama
+                    "model": self.model_name,
                     "messages": [
                         {"role": "user", "content": prompt}
-                    ]
+                    ],
+                    "stream": False  # Disable streaming to get a single response
                 }
             )
             
             if response.status_code == 200:
-                return response.json()['message']['content']
+                try:
+                    return response.json()['message']['content']
+                except KeyError:
+                    return "Error: Unexpected response format from Ollama"
             else:
                 return f"Ollama API Error: {response.text}"
                 
