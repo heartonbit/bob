@@ -5,7 +5,7 @@ import os
 
 setup(
     name="bob",
-    version="0.1.0",
+    version="0.3.0",
     packages=find_packages(),
     install_requires=[
         'click>=7.0',
@@ -13,6 +13,7 @@ setup(
         'openai>=1.0.0',    # For OpenAI/ChatGPT
         'anthropic>=0.5.0', # For Claude
         'groq>=0.3.0',      # For Groq
+        'PyYAML>=6.0',      # For YAML file handling
     ],
     extras_require={
         'dev': [

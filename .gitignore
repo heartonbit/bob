@@ -32,3 +32,4 @@ ENV/
 
 # Bob specific
 bob_config.json
+*.yaml
