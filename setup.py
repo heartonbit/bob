@@ -9,7 +9,18 @@ setup(
     packages=find_packages(),
     install_requires=[
         'click>=7.0',
+        'requests>=2.25.1',  # For Ollama API calls
+        'openai>=1.0.0',    # For OpenAI/ChatGPT
+        'anthropic>=0.5.0', # For Claude
+        'groq>=0.3.0',      # For Groq
     ],
+    extras_require={
+        'dev': [
+            'pytest>=6.0',
+            'black>=22.0',
+            'flake8>=4.0',
+        ],
+    },
     entry_points={
         'console_scripts': [
             'bob=bob.cli.main:cli',

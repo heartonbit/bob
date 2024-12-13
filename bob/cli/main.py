@@ -1,5 +1,7 @@
 import click
 from .init import init
+from .config import config
+from .chat import chat
 
 @click.group()
 def cli():
@@ -7,6 +9,7 @@ def cli():
     pass
 
 cli.add_command(init)
+cli.add_command(config)
+cli.add_command(chat)
 
-# Explicitly export the cli function
 __all__ = ['cli']
