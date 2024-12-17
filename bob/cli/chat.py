@@ -1,137 +1,142 @@
 import click
-import os
 import requests
-from .config import load_config, DEFAULT_CONFIG
+from .llm_config import load_llm_config
 
 class AIProvider:
-    def __init__(self, model_name):
-        self.model_name = model_name
+    def __init__(self, model_name=None):
+        self.llm_config = load_llm_config()
         
-    def get_response(self, prompt):
-        if self.model_name.startswith('gpt'):
-            return self._call_openai(prompt)
-        elif self.model_name.startswith('claude'):
-            return self._call_anthropic(prompt)
-        elif self.model_name == 'llama3':
-            return self._call_ollama(prompt)
-        elif self.model_name.startswith('groq'):
-            return self._call_groq(prompt)
-        else:
-            return self._call_openai(prompt)  # default to OpenAI
-    
-    def _call_openai(self, prompt):
-        try:
+        # Get provider from config
+        self.provider = self.llm_config.get('ai_provider', 'openai')
+        
+        # Get provider-specific configuration
+        provider_config = self.llm_config.get('providers', {}).get(self.provider, {})
+        self.api_key = provider_config.get('api_key')
+        
+        # Use passed model_name if provided, otherwise use from config
+        self.model_name = model_name or provider_config.get('model')
+        
+        if self.provider == 'ollama':
+            self.ollama_base_url = provider_config.get('ollama_base_url', 'http://localhost:11434')
+        elif self.provider == 'openai':
             from openai import OpenAI
-            api_key = os.getenv('OPENAI_API_KEY')
-            if not api_key:
-                return "Error: OPENAI_API_KEY environment variable not set"
-            
-            client = OpenAI(api_key=api_key)
-            response = client.chat.completions.create(
-                model=self.model_name if self.model_name != 'chatgpt' else 'gpt-3.5-turbo',
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content
-        except ImportError:
-            return "Error: OpenAI package not installed. Run 'pip install openai'"
-        except Exception as e:
-            return f"OpenAI API Error: {str(e)}"
-    
-    def _call_anthropic(self, prompt):
-        try:
+            self.client = OpenAI(api_key=self.api_key)
+        elif self.provider == 'anthropic':
             import anthropic
-            api_key = os.getenv('ANTHROPIC_API_KEY')
-            if not api_key:
-                return "Error: ANTHROPIC_API_KEY environment variable not set"
-            
-            client = anthropic.Anthropic(api_key=api_key)
-            response = client.messages.create(
-                model=self.model_name,  
-                max_tokens=1024,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            )
-            return response.content
-        except ImportError:
-            return "Error: Anthropic package not installed. Run 'pip install anthropic'"
-        except Exception as e:
-            return f"Anthropic API Error: {str(e)}"
-    
-    def _call_ollama(self, prompt):
-        try:
-            response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
-                    "model": self.model_name,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
-                    "stream": False  # Disable streaming to get a single response
-                }
-            )
-            
-            if response.status_code == 200:
-                try:
-                    return response.json()['message']['content']
-                except KeyError:
-                    return "Error: Unexpected response format from Ollama"
-            else:
-                return f"Ollama API Error: {response.text}"
-                
-        except requests.exceptions.ConnectionError:
-            return "Error: Could not connect to Ollama. Make sure Ollama is running (http://localhost:11434)"
-        except Exception as e:
-            return f"Ollama Error: {str(e)}"
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+        elif self.provider == 'groq':
+            from groq import Groq
+            self.client = Groq(api_key=self.api_key)
 
-    def _call_groq(self, prompt):
+    def list_models(self):
+        """List available models from provider"""
         try:
-            import groq
-            api_key = os.getenv('GROQ_API_KEY')
-            if not api_key:
-                return "Error: GROQ_API_KEY environment variable not set"
-            
-            client = groq.Groq(api_key=api_key)
-            response = client.chat.completions.create(
-                model=self.model_name if self.model_name != 'groq' else 'mixtral-8x7b-32768',
-                messages=[{"role": "user", "content": prompt}]
-            )
-            return response.choices[0].message.content
-        except ImportError:
-            return "Error: Groq package not installed. Run 'pip install groq'"
+            if self.provider == 'ollama':
+                response = requests.get(f"{self.ollama_base_url}/api/tags")
+                response.raise_for_status()
+                return response.json().get('models', [])
+            # Add model listing for other providers if needed
+            return []
+        except requests.exceptions.RequestException as e:
+            click.echo(f"API Error: {str(e)}")
+            if hasattr(e.response, 'text'):
+                click.echo(f"Response details: {e.response.text}")
+            return []
+
+    def get_response(self, prompt):
+        """Get response from AI model"""
+        try:
+            if self.provider == 'ollama':
+                response = requests.post(
+                    f"{self.ollama_base_url}/api/generate",
+                    json={
+                        "model": self.model_name,
+                        "prompt": prompt,
+                        "stream": False,
+                        "options": {
+                            "temperature": 0.7
+                        }
+                    }
+                )
+                response.raise_for_status()
+                return response.json().get('response', '')
+                
+            elif self.provider == 'openai':
+                completion = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return completion.choices[0].message.content
+                
+            elif self.provider == 'anthropic':
+                message = self.client.messages.create(
+                    model=self.model_name,
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return message.content
+                
+            elif self.provider == 'groq':
+                chat_completion = self.client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model=self.model_name,
+                )
+                return chat_completion.choices[0].message.content
+                
+            else:
+                click.echo(f"Unsupported AI provider: {self.provider}")
+                return ""
+                
+        except requests.exceptions.RequestException as e:
+            click.echo(f"API Error: {str(e)}")
+            if hasattr(e.response, 'text'):
+                click.echo(f"Response details: {e.response.text}")
+            return ""
         except Exception as e:
-            return f"Groq API Error: {str(e)}"
+            click.echo(f"Error: {str(e)}")
+            return ""
 
 @click.command()
-def chat():
-    """Test chat with the configured AI model"""
-    try:
-        try:
-            config = load_config()
-        except click.Abort:
-            # If config file doesn't exist, use default configuration
-            config = DEFAULT_CONFIG
-            
-        ai_model = config.get('ai_model', 'chatgpt')
-        ai_provider = AIProvider(ai_model)
-        
-        click.echo(f"\nTesting chat with {ai_model}...")
-        click.echo("Type ':exit' to end the conversation\n")
+@click.argument('message', required=False)
+@click.option('--list-models', is_flag=True, help='List available models')
+def chat(message, list_models):
+    """Chat with AI assistant. If no message is provided, starts interactive mode."""
+    ai_provider = AIProvider()
+    provider_config = ai_provider.llm_config.get('providers', {}).get(ai_provider.provider, {})
+    model_name = provider_config.get('model', 'unknown')
+    
+    if list_models:
+        models = ai_provider.list_models()
+        if models:
+            click.echo("Available models:")
+            for model in models:
+                click.echo(f"- {model}")
+        else:
+            click.echo("No models available or unable to fetch models")
+        return
+    
+    if message:
+        # Single message mode
+        response = ai_provider.get_response(message)
+        click.echo(response)
+    else:
+        # Interactive mode
+        click.echo(f"Starting chat with {model_name} ({ai_provider.provider})")
+        click.echo("Type 'exit' or 'quit' to end")
+        click.echo("----------------------------------------")
         
         while True:
             # Get user input
-            user_input = click.prompt("You")
+            message = click.prompt("\nYou", prompt_suffix="> ")
             
-            if user_input.lower() == ':exit':
+            # Check for exit command
+            if message.lower() in ['exit', 'quit']:
+                click.echo("\nEnding chat session.")
                 break
                 
-            # Get response from AI model
-            response = ai_provider.get_response(user_input)
-            click.echo(f"\nAI: {response}\n")
-            
-    except Exception as e:
-        click.echo(f"Error: {str(e)}", err=True)
-        raise click.Abort() 
+            # Get and display AI response
+            click.echo("\nAI", nl=False)
+            with click.progressbar(length=1, label='thinking') as bar:
+                response = ai_provider.get_response(message)
+                bar.update(1)
+            click.echo("> " + response)

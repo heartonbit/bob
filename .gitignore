@@ -32,4 +32,5 @@ ENV/
 
 # Bob specific
 bob_config.json
-*.yaml
+llm_config.json
+src/

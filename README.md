@@ -1,6 +1,6 @@
-# test
+# Test
 
-test
+Test Project
 
 ## Installation
 

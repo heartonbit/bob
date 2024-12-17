@@ -5,21 +5,30 @@ import json
 import click
 from datetime import datetime
 
+def get_available_providers():
+    """Get list of available AI providers from llm_config.json"""
+    try:
+        with open('llm_config.json', 'r') as f:
+            llm_config = json.load(f)
+            return list(llm_config.get('providers', {}).keys())
+    except:
+        return ['ollama']  # Default if config not found
+
 DEFAULT_CONFIG = {
     "project_name": "",
     "created_at": "",
-    "version": "0.1.0",
+    "version": "0.1.0", 
     "description": "",
     "author": "",
     "max_test_retries": 3,
-    "ai_model": "gpt-4",
+    "ai_provider": "ollama",
     "language": "python",
     "platform": "linux"
 }
 
 DEFAULT_STRUCTURE = [
     "src/",
-    "src/__init__.py",
+    "src/__init__.py", 
     "tests/",
     "tests/__init__.py",
     "docs/",
@@ -114,7 +123,8 @@ pip install -r requirements.txt
 @click.option('--name', prompt='Project name', help='Name of the project')
 @click.option('--description', prompt='Project description', help='Brief description of the project')
 @click.option('--author', prompt='Author name', help='Name of the project author')
-def init(name, description, author):
+@click.option('--ai-provider', type=click.Choice(get_available_providers()), prompt='AI provider', help='AI provider to use')
+def init(name, description, author, ai_provider):
     """Initialize a new Bob project."""
     
     # Check if directory is empty
@@ -130,6 +140,7 @@ def init(name, description, author):
             "project_name": name,
             "description": description,
             "author": author,
+            "ai_provider": ai_provider,
             "created_at": datetime.now().isoformat()
         })
 
@@ -164,7 +175,7 @@ Created files and directories:
 Next steps:
 1. Define project objectives: bob objectives
 2. Create user stories: bob stories
-3. Design classes: bob design-classes
+3. Design classes: bob design
         """)
 
     except Exception as e:
